@@ -13,7 +13,7 @@ NEON_DARK_THEME = {
     "PANEL_COLOR": "#181820",
     "ACCENT_COLOR": "#C9E819",
     "TEXT_COLOR": "#00FFFF",
-    "BTN_COLOR": "#0CC4F7",
+    "BTN_COLOR": "#53C4F1",
     "BTN_TEXT_COLOR": "#101014",
     "SIGNAL1_COLOR": "#39FF14",
     "SIGNAL2_COLOR": "#00FFFF",
@@ -45,7 +45,6 @@ class SignalGUI:
                             fg=self.theme["ACCENT_COLOR"], bg=self.theme["BG_COLOR"])
         title_label.pack(pady=(10, 10))
 
-        # Remove theme switch button (dark only)
         # Main layout
         main_frame = Frame(master, bg=self.theme["BG_COLOR"])
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
@@ -60,7 +59,9 @@ class SignalGUI:
         # Signal 1 controls
         self.signal_type = StringVar(master, "Sine")
         Label(control_frame, text="Signal 1 Type", bg=self.theme["PANEL_COLOR"], fg=self.theme["TEXT_COLOR"], font=("Helvetica Neue", 16, "bold")).pack(anchor="w", padx=15, pady=(15, 5))
-        OptionMenu(control_frame, self.signal_type, "Sine", "Square", "Sawtooth", "Step", "Impulse", "Ramp").pack(fill="x", padx=15, pady=5)
+        signal_type_menu = OptionMenu(control_frame, self.signal_type, "Sine", "Square", "Sawtooth", "Step", "Impulse", "Ramp")
+        signal_type_menu.config(font=("Helvetica Neue", 14))  # Increased font size
+        signal_type_menu.pack(fill="x", padx=15, pady=5)
 
         self.amp1_var = DoubleVar(value=1.0)
         self.amp1_label = self.add_slider(control_frame, "Amplitude", self.amp1_var, 0.1, 5.0, 0.1, self.theme["SIGNAL1_COLOR"])
@@ -74,7 +75,9 @@ class SignalGUI:
         # Operation
         Label(control_frame, text="Operation", bg=self.theme["PANEL_COLOR"], fg=self.theme["TEXT_COLOR"], font=("Helvetica Neue", 16, "bold")).pack(anchor="w", padx=15, pady=(15, 5))
         self.operation_type = StringVar(master, "Time Scaling")
-        OptionMenu(control_frame, self.operation_type, *OPERATION_FORMULAS.keys(), command=self.update_parameter_controls).pack(fill="x", padx=15, pady=5)
+        operation_menu = OptionMenu(control_frame, self.operation_type, *OPERATION_FORMULAS.keys(), command=self.update_parameter_controls)
+        operation_menu.config(font=("Helvetica Neue", 14))  # Increased font size
+        operation_menu.pack(fill="x", padx=15, pady=5)
 
         # Signal 2 controls (for addition/multiplication)
         self.signal2_frame = Frame(control_frame, bg=self.theme["PANEL_COLOR"])
@@ -112,7 +115,7 @@ class SignalGUI:
 
         # Reset button
         self.reset_button = Button(control_frame, text="Reset to Default", font=("Helvetica Neue", 14, "bold"),
-                                  command=self.reset_parameters, bg=self.theme["BTN_COLOR"], fg=self.theme["BTN_TEXT_COLOR"])
+                                  command=self.reset_parameters, bg=self.theme["ACCENT_COLOR"], fg=self.theme["BTN_TEXT_COLOR"])
         self.reset_button.pack(pady=(0, 10), fill="x", padx=15)
 
         # Right panel - Plots
@@ -172,18 +175,24 @@ class SignalGUI:
         if operation == "Time Scaling":
             self.param_label.config(text="Scaling factor (a):")
             self.param_var.set(1.0)
-            self.param_label.pack(anchor="w", padx=15, pady=(15, 0))
-            self.param_entry.pack(fill="x", padx=15, pady=5)
+            self.param_label.pack_forget()
+            self.param_entry.pack_forget()
+            self.param_label.pack(before=self.process_button, anchor="w", padx=15, pady=(15, 0))
+            self.param_entry.pack(before=self.process_button, fill="x", padx=15, pady=5)
         elif operation == "Amplitude Scaling":
             self.param_label.config(text="Amplitude (A):")
             self.param_var.set(2.0)
-            self.param_label.pack(anchor="w", padx=15, pady=(15, 0))
-            self.param_entry.pack(fill="x", padx=15, pady=5)
+            self.param_label.pack_forget()
+            self.param_entry.pack_forget()
+            self.param_label.pack(before=self.process_button, anchor="w", padx=15, pady=(15, 0))
+            self.param_entry.pack(before=self.process_button, fill="x", padx=15, pady=5)
         elif operation == "Time Shifting":
             self.param_label.config(text="Shift (t₀):")
             self.param_var.set(0.1)
-            self.param_label.pack(anchor="w", padx=15, pady=(15, 0))
-            self.param_entry.pack(fill="x", padx=15, pady=5)
+            self.param_label.pack_forget()
+            self.param_entry.pack_forget()
+            self.param_label.pack(before=self.process_button, anchor="w", padx=15, pady=(15, 0))
+            self.param_entry.pack(before=self.process_button, fill="x", padx=15, pady=5)
         self.formula_label.config(text=f"Formula: {OPERATION_FORMULAS.get(operation, '')}")
 
     def process_signal(self):
@@ -213,32 +222,37 @@ class SignalGUI:
             self.plot_current_signal()
 
     def plot_current_signal(self):
-        t = np.linspace(0, 1, 500)
         operation = self.operation_type.get()
         params = self.get_current_params()
-        if operation in ["Signal Addition", "Signal Multiplication"]:
+
+        t = np.linspace(0, 1, 500)  # Always use input signal sample range
+
+        if operation == "Time Shifting":
+            t0 = params["param"]
+            # Expand t to show negative side if needed
+            t_min = min(0, -t0)
+            t_max = max(1, 1 - t0)
+            t = np.linspace(t_min, t_max, 500)
+            s1 = self.generate_signal(params["signal_type"], t, params["amp1"], params["freq1"], params["phase1"])
+            processed = self.generate_signal(params["signal_type"], t - t0, params["amp1"], params["freq1"], params["phase1"])
+            self.plot_signals([t, t], s1, processed)
+        elif operation == "Time Scaling":
+            a = params["param"]
+            s1 = self.generate_signal(params["signal_type"], t, params["amp1"], params["freq1"], params["phase1"])
+            processed = self.generate_signal(params["signal_type"], a * t, params["amp1"], params["freq1"], params["phase1"])
+            self.plot_signals([t, t], s1, processed)
+        elif operation == "Time Reversal":
+            s1 = self.generate_signal(params["signal_type"], t, params["amp1"], params["freq1"], params["phase1"])
+            processed = self.generate_signal(params["signal_type"], -t, params["amp1"], params["freq1"], params["phase1"])
+            self.plot_signals(t, s1, processed)
+        elif operation in ["Signal Addition", "Signal Multiplication"]:
             s1 = self.generate_signal(params["signal_type"], t, params["amp1"], params["freq1"], params["phase1"])
             s2 = self.generate_signal(params["signal2_type"], t, params["amp2"], params["freq2"], params["phase2"])
-            if operation == "Signal Addition":
-                processed = s1 + s2
-            else:
-                processed = s1 * s2
+            processed = s1 + s2 if operation == "Signal Addition" else s1 * s2
             self.plot_signals(t, s1, processed, s2)
-        elif operation == "Time Scaling":
-            s1 = self.generate_signal(params["signal_type"], t, params["amp1"], params["freq1"], params["phase1"])
-            processed = self.generate_signal(params["signal_type"], t * params["param"], params["amp1"], params["freq1"], params["phase1"])
-            self.plot_signals(t, s1, processed)
         elif operation == "Amplitude Scaling":
             s1 = self.generate_signal(params["signal_type"], t, params["amp1"], params["freq1"], params["phase1"])
             processed = params["param"] * s1
-            self.plot_signals(t, s1, processed)
-        elif operation == "Time Shifting":
-            s1 = self.generate_signal(params["signal_type"], t, params["amp1"], params["freq1"], params["phase1"])
-            processed = self.generate_signal(params["signal_type"], t - params["param"], params["amp1"], params["freq1"], params["phase1"])
-            self.plot_signals(t, s1, processed)
-        elif operation == "Time Reversal":
-            s1 = self.generate_signal(params["signal_type"], t, params["amp1"], params["freq1"], params["phase1"])
-            processed = s1[::-1]
             self.plot_signals(t, s1, processed)
         else:
             s1 = self.generate_signal(params["signal_type"], t, params["amp1"], params["freq1"], params["phase1"])
@@ -250,14 +264,16 @@ class SignalGUI:
         n_plots = 3 if s2 is not None else 2
         axs = self.figure.subplots(n_plots, 1, sharex=True)
         axs = np.array(axs).flatten() if n_plots > 1 else np.array([axs])
-        for ax in axs:
+        for i, ax in enumerate(axs):
             ax.set_facecolor(self.theme["PANEL_COLOR"])
             ax.grid(True, linestyle='--', alpha=0.3, color=self.theme["ACCENT_COLOR"])
             ax.set_xlabel("Time (s)", color=self.theme["TEXT_COLOR"])
             ax.set_ylabel("Amplitude", color=self.theme["TEXT_COLOR"])
             ax.tick_params(colors=self.theme["TEXT_COLOR"])
+            ax.axhline(0, color="#22C0D5", linewidth=2, alpha=0.8)
+            ax.axvline(0, color="#22C0D5", linewidth=2, alpha=0.8)
         axs[0].set_title("Signal 1", color=self.theme["SIGNAL1_COLOR"])
-        axs[0].plot(t, s1, color=self.theme["SIGNAL1_COLOR"], linewidth=2)
+        axs[0].plot(t[0] if isinstance(t, list) else t, s1, color=self.theme["SIGNAL1_COLOR"], linewidth=2)
         if s2 is not None:
             axs[1].set_title("Signal 2", color=self.theme["SIGNAL2_COLOR"])
             axs[1].plot(t, s2, color=self.theme["SIGNAL2_COLOR"], linewidth=2)
@@ -265,11 +281,11 @@ class SignalGUI:
             axs[2].plot(t, processed, color=self.theme["RESULT_COLOR"], linewidth=2)
         else:
             axs[1].set_title("Processed Signal", color=self.theme["RESULT_COLOR"])
-            axs[1].plot(t, processed, color=self.theme["RESULT_COLOR"], linewidth=2)
+            # For time scaling, plot processed with scaled time axis
+            axs[1].plot(t[1] if isinstance(t, list) else t, processed, color=self.theme["RESULT_COLOR"], linewidth=2)
         self.figure.tight_layout()
         self.canvas_plot.draw()
 
-        # --- Hover feature ---
         def format_coord(x, y, ax, t_data, y_data):
             idx = (np.abs(t_data - x)).argmin()
             if 0 <= idx < len(y_data):
@@ -286,14 +302,16 @@ class SignalGUI:
         def on_motion(event):
             if event.inaxes:
                 ax = event.inaxes
-                ax_idx = np.where(axs == ax)[0][0]  # FIXED: get index from numpy array
+                ax_idx = np.where(axs == ax)[0][0]
                 if ax_idx == 0:
                     y_data = s1
+                    t_data = t[0] if isinstance(t, list) else t
                 elif ax_idx == 1 and s2 is not None:
                     y_data = s2
+                    t_data = t
                 else:
                     y_data = processed
-                t_data = t
+                    t_data = t[1] if isinstance(t, list) else t
                 text = format_coord(event.xdata, event.ydata, ax, t_data, y_data)
                 self.hover_label.config(text=text)
                 self.hover_label.place(x=event.guiEvent.x + 10, y=event.guiEvent.y + 10)
@@ -477,6 +495,7 @@ class SignalGUI:
         self.phase2_var.set(0.0)
         self.operation_type.set("Time Scaling")
         self.param_var.set(1.0)
+        self.plot_current_signal()
         # Show default graph after reset
         self.last_operation = self.operation_type.get()
         self.last_params = self.get_current_params()
