@@ -1,4 +1,4 @@
-from tkinter import Tk, Label, Button, StringVar, OptionMenu, Frame, DoubleVar, IntVar, Canvas, Scrollbar
+from tkinter import Tk, Label, Button, StringVar, OptionMenu, Frame, DoubleVar, IntVar, Canvas, Scrollbar, filedialog, messagebox
 import numpy as np
 import matplotlib.pyplot as plt
 import tkinter as tk
@@ -110,6 +110,11 @@ class SignalGUI:
                                       command=self.open_signals_window, bg=self.theme["RESULT_COLOR"], fg=self.theme["BTN_TEXT_COLOR"], relief="flat")
         self.show_all_button.pack(pady=(0, 20), fill="x", padx=15)
 
+        # Reset button
+        self.reset_button = Button(control_frame, text="Reset to Default", font=("Helvetica Neue", 14, "bold"),
+                                  command=self.reset_parameters, bg=self.theme["BTN_COLOR"], fg=self.theme["BTN_TEXT_COLOR"])
+        self.reset_button.pack(pady=(0, 10), fill="x", padx=15)
+
         # Right panel - Plots
         plot_frame = Frame(main_frame, bg=self.theme["PANEL_COLOR"], highlightbackground="#222233", highlightthickness=1)
         plot_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
@@ -117,6 +122,22 @@ class SignalGUI:
         self.figure.patch.set_facecolor(self.theme["PANEL_COLOR"])
         self.canvas_plot = FigureCanvasTkAgg(self.figure, master=plot_frame)
         self.canvas_plot.get_tk_widget().pack(fill="both", expand=True)
+
+        # Track last processed operation and parameters
+        self.last_operation = None
+        self.last_params = None
+
+        # Bind variable changes for dynamic update
+        self.amp1_var.trace_add("write", lambda *args: self.dynamic_update())
+        self.freq1_var.trace_add("write", lambda *args: self.dynamic_update())
+        self.phase1_var.trace_add("write", lambda *args: self.dynamic_update())
+        self.amp2_var.trace_add("write", lambda *args: self.dynamic_update())
+        self.freq2_var.trace_add("write", lambda *args: self.dynamic_update())
+        self.phase2_var.trace_add("write", lambda *args: self.dynamic_update())
+        self.param_var.trace_add("write", lambda *args: self.dynamic_update())
+        self.signal_type.trace_add("write", lambda *args: self.dynamic_update())
+        self.signal2_type.trace_add("write", lambda *args: self.dynamic_update())
+        self.operation_type.trace_add("write", lambda *args: self.dynamic_update())
 
         self.update_parameter_controls(self.operation_type.get())
 
@@ -166,34 +187,61 @@ class SignalGUI:
         self.formula_label.config(text=f"Formula: {OPERATION_FORMULAS.get(operation, '')}")
 
     def process_signal(self):
+        # Save current operation and parameters for dynamic update
+        self.last_operation = self.operation_type.get()
+        self.last_params = self.get_current_params()
+        self.plot_current_signal()
+
+    def get_current_params(self):
+        # Gather all relevant parameters for current state
+        return {
+            "signal_type": self.signal_type.get(),
+            "amp1": self.amp1_var.get(),
+            "freq1": self.freq1_var.get(),
+            "phase1": self.phase1_var.get(),
+            "signal2_type": self.signal2_type.get(),
+            "amp2": self.amp2_var.get(),
+            "freq2": self.freq2_var.get(),
+            "phase2": self.phase2_var.get(),
+            "operation": self.operation_type.get(),
+            "param": self.param_var.get()
+        }
+
+    def dynamic_update(self):
+        # Only update if a signal has been processed before
+        if self.last_operation is not None:
+            self.plot_current_signal()
+
+    def plot_current_signal(self):
         t = np.linspace(0, 1, 500)
         operation = self.operation_type.get()
+        params = self.get_current_params()
         if operation in ["Signal Addition", "Signal Multiplication"]:
-            s1 = self.generate_signal(self.signal_type.get(), t, self.amp1_var.get(), self.freq1_var.get(), self.phase1_var.get())
-            s2 = self.generate_signal(self.signal2_type.get(), t, self.amp2_var.get(), self.freq2_var.get(), self.phase2_var.get())
+            s1 = self.generate_signal(params["signal_type"], t, params["amp1"], params["freq1"], params["phase1"])
+            s2 = self.generate_signal(params["signal2_type"], t, params["amp2"], params["freq2"], params["phase2"])
             if operation == "Signal Addition":
                 processed = s1 + s2
             else:
                 processed = s1 * s2
             self.plot_signals(t, s1, processed, s2)
         elif operation == "Time Scaling":
-            s1 = self.generate_signal(self.signal_type.get(), t, self.amp1_var.get(), self.freq1_var.get(), self.phase1_var.get())
-            processed = self.generate_signal(self.signal_type.get(), t * self.param_var.get(), self.amp1_var.get(), self.freq1_var.get(), self.phase1_var.get())
+            s1 = self.generate_signal(params["signal_type"], t, params["amp1"], params["freq1"], params["phase1"])
+            processed = self.generate_signal(params["signal_type"], t * params["param"], params["amp1"], params["freq1"], params["phase1"])
             self.plot_signals(t, s1, processed)
         elif operation == "Amplitude Scaling":
-            s1 = self.generate_signal(self.signal_type.get(), t, self.amp1_var.get(), self.freq1_var.get(), self.phase1_var.get())
-            processed = self.param_var.get() * s1
+            s1 = self.generate_signal(params["signal_type"], t, params["amp1"], params["freq1"], params["phase1"])
+            processed = params["param"] * s1
             self.plot_signals(t, s1, processed)
         elif operation == "Time Shifting":
-            s1 = self.generate_signal(self.signal_type.get(), t, self.amp1_var.get(), self.freq1_var.get(), self.phase1_var.get())
-            processed = self.generate_signal(self.signal_type.get(), t - self.param_var.get(), self.amp1_var.get(), self.freq1_var.get(), self.phase1_var.get())
+            s1 = self.generate_signal(params["signal_type"], t, params["amp1"], params["freq1"], params["phase1"])
+            processed = self.generate_signal(params["signal_type"], t - params["param"], params["amp1"], params["freq1"], params["phase1"])
             self.plot_signals(t, s1, processed)
         elif operation == "Time Reversal":
-            s1 = self.generate_signal(self.signal_type.get(), t, self.amp1_var.get(), self.freq1_var.get(), self.phase1_var.get())
+            s1 = self.generate_signal(params["signal_type"], t, params["amp1"], params["freq1"], params["phase1"])
             processed = s1[::-1]
             self.plot_signals(t, s1, processed)
         else:
-            s1 = self.generate_signal(self.signal_type.get(), t, self.amp1_var.get(), self.freq1_var.get(), self.phase1_var.get())
+            s1 = self.generate_signal(params["signal_type"], t, params["amp1"], params["freq1"], params["phase1"])
             processed = s1
             self.plot_signals(t, s1, processed)
 
@@ -201,7 +249,7 @@ class SignalGUI:
         self.figure.clf()
         n_plots = 3 if s2 is not None else 2
         axs = self.figure.subplots(n_plots, 1, sharex=True)
-        axs = axs.flatten() if n_plots > 1 else [axs]
+        axs = np.array(axs).flatten() if n_plots > 1 else np.array([axs])
         for ax in axs:
             ax.set_facecolor(self.theme["PANEL_COLOR"])
             ax.grid(True, linestyle='--', alpha=0.3, color=self.theme["ACCENT_COLOR"])
@@ -220,6 +268,39 @@ class SignalGUI:
             axs[1].plot(t, processed, color=self.theme["RESULT_COLOR"], linewidth=2)
         self.figure.tight_layout()
         self.canvas_plot.draw()
+
+        # --- Hover feature ---
+        def format_coord(x, y, ax, t_data, y_data):
+            idx = (np.abs(t_data - x)).argmin()
+            if 0 <= idx < len(y_data):
+                return f"x={t_data[idx]:.3f}, y={y_data[idx]:.3f}"
+            return f"x={x:.3f}, y={y:.3f}"
+
+        if hasattr(self, 'hover_cid'):
+            self.canvas_plot.mpl_disconnect(self.hover_cid)
+        if hasattr(self, 'hover_label'):
+            self.hover_label.destroy()
+        self.hover_label = Label(self.canvas_plot.get_tk_widget(), bg="#222233", fg="#39FF14", font=("Helvetica Neue", 12, "bold"), bd=1, relief="solid")
+        self.hover_label.place_forget()
+
+        def on_motion(event):
+            if event.inaxes:
+                ax = event.inaxes
+                ax_idx = np.where(axs == ax)[0][0]  # FIXED: get index from numpy array
+                if ax_idx == 0:
+                    y_data = s1
+                elif ax_idx == 1 and s2 is not None:
+                    y_data = s2
+                else:
+                    y_data = processed
+                t_data = t
+                text = format_coord(event.xdata, event.ydata, ax, t_data, y_data)
+                self.hover_label.config(text=text)
+                self.hover_label.place(x=event.guiEvent.x + 10, y=event.guiEvent.y + 10)
+            else:
+                self.hover_label.place_forget()
+
+        self.hover_cid = self.canvas_plot.mpl_connect("motion_notify_event", on_motion)
 
     def generate_signal(self, sig_type, t, amp, freq, phase=0):
         phase_rad = np.deg2rad(phase)
@@ -242,6 +323,10 @@ class SignalGUI:
     def open_signals_window(self):
         t = np.linspace(0, 1, 500)
         operation = self.operation_type.get()
+        win = tk.Toplevel(self.master)
+        win.title("All Signals")
+        win.configure(bg=self.theme["BG_COLOR"])
+
         if operation in ["Signal Addition", "Signal Multiplication"]:
             s1 = self.generate_signal(self.signal_type.get(), t, self.amp1_var.get(), self.freq1_var.get(), self.phase1_var.get())
             s2 = self.generate_signal(self.signal2_type.get(), t, self.amp2_var.get(), self.freq2_var.get(), self.phase2_var.get())
@@ -249,9 +334,6 @@ class SignalGUI:
                 processed = s1 + s2
             else:
                 processed = s1 * s2
-            win = tk.Toplevel(self.master)
-            win.title("All Signals")
-            win.configure(bg=self.theme["BG_COLOR"])
             fig, axs = plt.subplots(3, 1, figsize=(7, 7), sharex=True)
             fig.patch.set_facecolor(self.theme["PANEL_COLOR"])
             axs = axs.flatten()
@@ -276,23 +358,128 @@ class SignalGUI:
             axs[2].tick_params(colors=self.theme["TEXT_COLOR"])
             axs[2].set_title("Resultant Signal", color=self.theme["RESULT_COLOR"])
             axs[2].plot(t, processed, color=self.theme["RESULT_COLOR"], linewidth=2)
-            fig.tight_layout()
-            canvas = FigureCanvasTkAgg(fig, master=win)
-            canvas.get_tk_widget().pack(fill="both", expand=True)
-            canvas.draw()
-
-            # Add Save as PNG button
-            def save_png():
-                fig.savefig("signals.png", dpi=300, bbox_inches='tight')
-                tk.messagebox.showinfo("Saved", "Plot saved as signals.png")
-
-            save_btn = Button(win, text="Save as PNG", font=("Helvetica Neue", 14, "bold"),
-                              bg=self.theme["BTN_COLOR"], fg=self.theme["BTN_TEXT_COLOR"],
-                              command=save_png)
-            save_btn.pack(pady=10)
         else:
-            # ...existing code for other operations...
-            pass
+            s1 = self.generate_signal(self.signal_type.get(), t, self.amp1_var.get(), self.freq1_var.get(), self.phase1_var.get())
+            if operation == "Time Scaling":
+                processed = self.generate_signal(self.signal_type.get(), t * self.param_var.get(), self.amp1_var.get(), self.freq1_var.get(), self.phase1_var.get())
+                fig, axs = plt.subplots(2, 1, figsize=(7, 7), sharex=True)
+                axs = axs.flatten()
+                axs[0].set_facecolor(self.theme["PANEL_COLOR"])
+                axs[0].grid(True, linestyle='--', alpha=0.3, color=self.theme["ACCENT_COLOR"])
+                axs[0].set_xlabel("Time (s)", color=self.theme["TEXT_COLOR"])
+                axs[0].set_ylabel("Amplitude", color=self.theme["TEXT_COLOR"])
+                axs[0].tick_params(colors=self.theme["TEXT_COLOR"])
+                axs[0].set_title("Original Signal", color=self.theme["SIGNAL1_COLOR"])
+                axs[0].plot(t, s1, color=self.theme["SIGNAL1_COLOR"], linewidth=2)
+                axs[1].set_facecolor(self.theme["PANEL_COLOR"])
+                axs[1].grid(True, linestyle='--', alpha=0.3, color=self.theme["ACCENT_COLOR"])
+                axs[1].set_xlabel("Time (s)", color=self.theme["TEXT_COLOR"])
+                axs[1].set_ylabel("Amplitude", color=self.theme["TEXT_COLOR"])
+                axs[1].tick_params(colors=self.theme["TEXT_COLOR"])
+                axs[1].set_title("Scaled Signal", color=self.theme["RESULT_COLOR"])
+                axs[1].plot(t, processed, color=self.theme["RESULT_COLOR"], linewidth=2)
+            elif operation == "Amplitude Scaling":
+                processed = self.param_var.get() * s1
+                fig, axs = plt.subplots(2, 1, figsize=(7, 7), sharex=True)
+                axs = axs.flatten()
+                axs[0].set_facecolor(self.theme["PANEL_COLOR"])
+                axs[0].grid(True, linestyle='--', alpha=0.3, color=self.theme["ACCENT_COLOR"])
+                axs[0].set_xlabel("Time (s)", color=self.theme["TEXT_COLOR"])
+                axs[0].set_ylabel("Amplitude", color=self.theme["TEXT_COLOR"])
+                axs[0].tick_params(colors=self.theme["TEXT_COLOR"])
+                axs[0].set_title("Original Signal", color=self.theme["SIGNAL1_COLOR"])
+                axs[0].plot(t, s1, color=self.theme["SIGNAL1_COLOR"], linewidth=2)
+                axs[1].set_facecolor(self.theme["PANEL_COLOR"])
+                axs[1].grid(True, linestyle='--', alpha=0.3, color=self.theme["ACCENT_COLOR"])
+                axs[1].set_xlabel("Time (s)", color=self.theme["TEXT_COLOR"])
+                axs[1].set_ylabel("Amplitude", color=self.theme["TEXT_COLOR"])
+                axs[1].tick_params(colors=self.theme["TEXT_COLOR"])
+                axs[1].set_title("Amplitude Scaled Signal", color=self.theme["RESULT_COLOR"])
+                axs[1].plot(t, processed, color=self.theme["RESULT_COLOR"], linewidth=2)
+            elif operation == "Time Shifting":
+                processed = self.generate_signal(self.signal_type.get(), t - self.param_var.get(), self.amp1_var.get(), self.freq1_var.get(), self.phase1_var.get())
+                fig, axs = plt.subplots(2, 1, figsize=(7, 7), sharex=True)
+                axs = axs.flatten()
+                axs[0].set_facecolor(self.theme["PANEL_COLOR"])
+                axs[0].grid(True, linestyle='--', alpha=0.3, color=self.theme["ACCENT_COLOR"])
+                axs[0].set_xlabel("Time (s)", color=self.theme["TEXT_COLOR"])
+                axs[0].set_ylabel("Amplitude", color=self.theme["TEXT_COLOR"])
+                axs[0].tick_params(colors=self.theme["TEXT_COLOR"])
+                axs[0].set_title("Original Signal", color=self.theme["SIGNAL1_COLOR"])
+                axs[0].plot(t, s1, color=self.theme["SIGNAL1_COLOR"], linewidth=2)
+                axs[1].set_facecolor(self.theme["PANEL_COLOR"])
+                axs[1].grid(True, linestyle='--', alpha=0.3, color=self.theme["ACCENT_COLOR"])
+                axs[1].set_xlabel("Time (s)", color=self.theme["TEXT_COLOR"])
+                axs[1].set_ylabel("Amplitude", color=self.theme["TEXT_COLOR"])
+                axs[1].tick_params(colors=self.theme["TEXT_COLOR"])
+                axs[1].set_title("Shifted Signal", color=self.theme["RESULT_COLOR"])
+                axs[1].plot(t, processed, color=self.theme["RESULT_COLOR"], linewidth=2)
+            elif operation == "Time Reversal":
+                processed = s1[::-1]
+                fig, axs = plt.subplots(2, 1, figsize=(7, 7), sharex=True)
+                axs = axs.flatten()
+                axs[0].set_facecolor(self.theme["PANEL_COLOR"])
+                axs[0].grid(True, linestyle='--', alpha=0.3, color=self.theme["ACCENT_COLOR"])
+                axs[0].set_xlabel("Time (s)", color=self.theme["TEXT_COLOR"])
+                axs[0].set_ylabel("Amplitude", color=self.theme["TEXT_COLOR"])
+                axs[0].tick_params(colors=self.theme["TEXT_COLOR"])
+                axs[0].set_title("Original Signal", color=self.theme["SIGNAL1_COLOR"])
+                axs[0].plot(t, s1, color=self.theme["SIGNAL1_COLOR"], linewidth=2)
+                axs[1].set_facecolor(self.theme["PANEL_COLOR"])
+                axs[1].grid(True, linestyle='--', alpha=0.3, color=self.theme["ACCENT_COLOR"])
+                axs[1].set_xlabel("Time (s)", color=self.theme["TEXT_COLOR"])
+                axs[1].set_ylabel("Amplitude", color=self.theme["TEXT_COLOR"])
+                axs[1].tick_params(colors=self.theme["TEXT_COLOR"])
+                axs[1].set_title("Reversed Signal", color=self.theme["RESULT_COLOR"])
+                axs[1].plot(t, processed, color=self.theme["RESULT_COLOR"], linewidth=2)
+            else:
+                processed = s1
+                fig, axs = plt.subplots(1, 1, figsize=(7, 4), sharex=True)
+                axs = np.array([axs])
+                axs[0].set_facecolor(self.theme["PANEL_COLOR"])
+                axs[0].grid(True, linestyle='--', alpha=0.3, color=self.theme["ACCENT_COLOR"])
+                axs[0].set_xlabel("Time (s)", color=self.theme["TEXT_COLOR"])
+                axs[0].set_ylabel("Amplitude", color=self.theme["TEXT_COLOR"])
+                axs[0].tick_params(colors=self.theme["TEXT_COLOR"])
+                axs[0].set_title("Signal", color=self.theme["SIGNAL1_COLOR"])
+                axs[0].plot(t, processed, color=self.theme["SIGNAL1_COLOR"], linewidth=2)
+
+        fig.tight_layout()
+        canvas = FigureCanvasTkAgg(fig, master=win)
+        canvas.get_tk_widget().pack(fill="both", expand=True)
+        canvas.draw()
+
+        # Add Save as PNG button with file dialog for all signal types
+        def save_png():
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".png",
+                filetypes=[("PNG files", "*.png")],
+                title="Save plot as PNG"
+            )
+            if file_path:
+                fig.savefig(file_path, dpi=300, bbox_inches='tight')
+                messagebox.showinfo("Saved", f"Plot saved as:\n{file_path}")
+
+        save_btn = Button(win, text="Save as PNG", font=("Helvetica Neue", 14, "bold"),
+                          bg=self.theme["BTN_COLOR"], fg=self.theme["BTN_TEXT_COLOR"],
+                          command=save_png)
+        save_btn.pack(pady=10)
+
+    def reset_parameters(self):
+        # Reset all parameters to their default values
+        self.signal_type.set("Sine")
+        self.amp1_var.set(1.0)
+        self.freq1_var.set(5.0)
+        self.phase1_var.set(0.0)
+        self.signal2_type.set("Sine")
+        self.amp2_var.set(1.0)
+        self.freq2_var.set(5.0)
+        self.phase2_var.set(0.0)
+        self.operation_type.set("Time Scaling")
+        self.param_var.set(1.0)
+        # Show default graph after reset
+        self.last_operation = self.operation_type.get()
+        self.last_params = self.get_current_params()
 
     def run(self):
         self.master.mainloop()
