@@ -66,10 +66,8 @@ class SignalGUI:
         self.amp1_var = DoubleVar(value=1.0)
         self.amp1_label = self.add_slider(control_frame, "Amplitude", self.amp1_var, 0.1, 5.0, 0.1, self.theme["SIGNAL1_COLOR"])
 
-        self.freq1_var = DoubleVar(value=5.0)
+        self.freq1_var = DoubleVar(value=1.0)
         self.freq1_label = self.add_slider(control_frame, "Frequency", self.freq1_var, 1.0, 20.0, 1.0, self.theme["SIGNAL2_COLOR"])
-
-        # Remove phase slider, add manual entry for phase
         self.phase1_var = DoubleVar(value=0.0)
         phase_frame = Frame(control_frame, bg=self.theme["PANEL_COLOR"])
         phase_frame.pack(fill="x", padx=15, pady=(10, 0))
@@ -260,15 +258,13 @@ class SignalGUI:
         t_min, t_max = 0, 1
         if operation == "Time Shifting":
             t0 = params["param"]
-            t_min = min(0, 0 - t0)
-            t_max = max(0, 1 - t0)
+            t_min = 0 + t0
+            t_max = 1 + t0
         elif operation == "Time Scaling":
             a = params["param"]
             if a != 0:
-                scaled_min = -1 / a
-                scaled_max = 1 / a
-                t_min = min(-1, scaled_min)
-                t_max = max(1, scaled_max)
+                t_min = 0 / a
+                t_max = 1 / a
         elif operation == "Time Reversal":
             t_min, t_max = -1, 1
         elif params["signal_type"] in ["Ramp", "Impulse", "Step"]:
