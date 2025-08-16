@@ -49,13 +49,58 @@ class SignalGUI:
         main_frame = Frame(master, bg=self.theme["BG_COLOR"])
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
         main_frame.grid_columnconfigure(0, weight=1)
-        main_frame.grid_columnconfigure(1, weight=1)
+        main_frame.grid_columnconfigure(1, weight=2) 
         main_frame.grid_rowconfigure(0, weight=1)
 
-        # Left panel
-        control_frame = Frame(main_frame, bg=self.theme["PANEL_COLOR"], highlightbackground="#222233", highlightthickness=1)
-        control_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        # --- REFINED SCALABLE CONTROL PANEL ---
+        control_panel_container = Frame(main_frame, bg=self.theme["PANEL_COLOR"], highlightbackground="#222233", highlightthickness=1)
+        control_panel_container.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        control_panel_container.grid_rowconfigure(0, weight=1)
+        control_panel_container.grid_columnconfigure(0, weight=1)
 
+        canvas = Canvas(control_panel_container, bg=self.theme["PANEL_COLOR"], highlightthickness=0)
+        
+        style = ttk.Style()
+        style.theme_use('clam')
+        style.configure("Vertical.TScrollbar", gripcount=0,
+                        background=self.theme["ACCENT_COLOR"], darkcolor=self.theme["SLIDER_BG"], lightcolor=self.theme["SLIDER_BG"],
+                        troughcolor=self.theme["PANEL_COLOR"], bordercolor=self.theme["BG_COLOR"], arrowcolor=self.theme["BG_COLOR"])
+
+        scrollbar = ttk.Scrollbar(control_panel_container, orient="vertical", command=canvas.yview, style="Vertical.TScrollbar")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        scrollbar.grid(row=0, column=1, sticky='ns')
+        canvas.grid(row=0, column=0, sticky='nsew')
+
+        control_frame = Frame(canvas, bg=self.theme["PANEL_COLOR"])
+        frame_id = canvas.create_window((0, 0), window=control_frame, anchor="nw")
+
+        def on_frame_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        # --- NEW: BINDING TO MAKE THE FRAME WIDTH SCALABLE ---
+        def on_canvas_configure(event):
+            # This makes the inner frame scale with the canvas's width
+            canvas.itemconfig(frame_id, width=event.width)
+        
+        control_frame.bind("<Configure>", on_frame_configure)
+        canvas.bind("<Configure>", on_canvas_configure)
+        
+        def on_mousewheel(event):
+            if control_panel_container.winfo_containing(event.x_root, event.y_root) == control_panel_container:
+                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        
+        def on_linux_scroll(event):
+             if control_panel_container.winfo_containing(event.x_root, event.y_root) == control_panel_container:
+                if event.num == 4:
+                    canvas.yview_scroll(-1, "units")
+                elif event.num == 5:
+                    canvas.yview_scroll(1, "units")
+
+        master.bind_all("<MouseWheel>", on_mousewheel)
+        master.bind_all("<Button-4>", on_linux_scroll)
+        master.bind_all("<Button-5>", on_linux_scroll)
+        
         # Signal 1 controls
         self.signal_type = StringVar(master, "Sine")
         Label(control_frame, text="Signal 1 Type", bg=self.theme["PANEL_COLOR"], fg=self.theme["TEXT_COLOR"], font=("Helvetica Neue", 16, "bold")).pack(anchor="w", padx=15, pady=(15, 5))
@@ -101,8 +146,7 @@ class SignalGUI:
         self.param_var = DoubleVar(value=1.0)
         self.param_label = Label(control_frame, text="Scaling factor (a):", bg=self.theme["PANEL_COLOR"], fg=self.theme["ACCENT_COLOR"], font=("Helvetica Neue", 14, "bold"))
         self.param_slider = ttk.Scale(control_frame, from_=0.1, to=5.0, variable=self.param_var, orient="horizontal", style="Scaling.Horizontal.TScale")
-        style = ttk.Style()
-        style.theme_use('clam')
+        
         style.configure("Scaling.Horizontal.TScale", troughcolor=self.theme["SLIDER_BG"], background=self.theme["ACCENT_COLOR"], thickness=8)
         
         # Formula display
@@ -131,17 +175,22 @@ class SignalGUI:
 
         self.show_all_button = Button(control_frame, text="Show All Signals", font=("Helvetica Neue", 16, "bold"),
                                       command=self.open_signals_window, bg=self.theme["RESULT_COLOR"], fg=self.theme["BTN_TEXT_COLOR"], relief="flat")
-        self.show_all_button.pack(pady=(0, 20), fill="x", padx=15)
+        self.show_all_button.pack(pady=(0, 10), fill="x", padx=15)
+
+        self.save_button = Button(control_frame, text="Save This Plot", font=("Helvetica Neue", 16, "bold"),
+                                  command=self.save_main_plot, bg="#FFA500", fg=self.theme["BTN_TEXT_COLOR"], relief="flat")
+        self.save_button.pack(pady=(0, 20), fill="x", padx=15)
 
         # Reset button
         self.reset_button = Button(control_frame, text="Reset to Default", font=("Helvetica Neue", 14, "bold"),
                                   command=self.reset_parameters, bg=self.theme["ACCENT_COLOR"], fg=self.theme["BTN_TEXT_COLOR"])
-        self.reset_button.pack(pady=(0, 10), fill="x", padx=15)
+        self.reset_button.pack(pady=(0, 20), fill="x", padx=15)
 
         # Right panel - Plots
         plot_frame = Frame(main_frame, bg=self.theme["PANEL_COLOR"], highlightbackground="#222233", highlightthickness=1)
         plot_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
-        self.figure, self.axs = plt.subplots(2, 1, figsize=(6, 6))
+        
+        self.figure, self.axs = plt.subplots(1, 1, figsize=(6, 6))
         self.figure.patch.set_facecolor(self.theme["PANEL_COLOR"])
         self.canvas_plot = FigureCanvasTkAgg(self.figure, master=plot_frame)
         self.canvas_plot.get_tk_widget().pack(fill="both", expand=True)
@@ -203,7 +252,7 @@ class SignalGUI:
         before_formula = self.formula_label
 
         if operation in ["Signal Addition", "Signal Multiplication"]:
-            self.signal2_frame.pack(before=before_formula, fill="x")
+            self.signal2_frame.pack(before=before_formula, fill="x", pady=5)
         
         param_controls_to_show = []
 
@@ -271,129 +320,141 @@ class SignalGUI:
             self.plot_current_signal()
 
     def plot_current_signal(self):
-        operation = self.operation_type.get()
         params = self.get_current_params()
-        
-        num_points = params["samples"] if params["is_discrete"] else 500
-        t_input = np.linspace(0, 1, num_points)
+        operation = params["operation"]
+        is_discrete = params["is_discrete"]
+        num_points = params["samples"] if is_discrete else 500
 
-        t_min, t_max = 0, 1
-        if operation == "Time Shifting":
-            t0 = params["param"]
-            t_min, t_max = 0 + t0, 1 + t0
-        elif operation == "Time Scaling":
-            a = params["param"]
-            if a != 0:
-                t_min, t_max = min(0/a, 1/a), max(0/a, 1/a)
-        elif operation == "Time Reversal":
-            t_min, t_max = -1, 0
-        
-        t_output = np.linspace(t_min, t_max, num_points)
+        t_input = np.linspace(0, 1, num_points)
         s1 = self.generate_signal(params["signal_type"], t_input, params["amp1"], params["freq1"], params["phase1"])
-        
-        processed = None
         s2 = None
 
+        t_processed = t_input
+        processed = s1
+
         if operation == "Time Shifting":
-            processed = self.generate_signal(params["signal_type"], t_output - params["param"], params["amp1"], params["freq1"], params["phase1"])
-            self.plot_signals([t_input, t_output], s1, processed, is_discrete=params["is_discrete"])
+            t0 = params["param"]
+            t_processed = t_input + t0
+            processed = s1
+        
         elif operation == "Time Scaling":
             a = params["param"]
-            processed = self.generate_signal(params["signal_type"], a * t_output, params["amp1"], params["freq1"], params["phase1"])
-            self.plot_signals([t_input, t_output], s1, processed, is_discrete=params["is_discrete"])
+            if a > 1e-9:
+                t_processed = t_input / a
+                processed = s1
+            else:
+                t_processed = t_input
+                val_at_zero = self.generate_signal(params["signal_type"], np.zeros(1), params["amp1"], params["freq1"], params["phase1"])[0]
+                processed = np.full_like(t_input, val_at_zero)
+
         elif operation == "Time Reversal":
-            processed = self.generate_signal(params["signal_type"], -t_output, params["amp1"], params["freq1"], params["phase1"])
-            self.plot_signals([t_input, t_output], s1, processed, is_discrete=params["is_discrete"])
+            t_processed = -t_input
+            processed = s1
+            
         elif operation in ["Signal Addition", "Signal Multiplication"]:
             s2 = self.generate_signal(params["signal2_type"], t_input, params["amp2"], params["freq2"], params["phase2"])
             processed = s1 + s2 if operation == "Signal Addition" else s1 * s2
-            self.plot_signals(t_input, s1, processed, s2, is_discrete=params["is_discrete"])
+        
         elif operation == "Amplitude Scaling":
             processed = params["param"] * s1
-            self.plot_signals(t_input, s1, processed, is_discrete=params["is_discrete"])
-        else:
-            processed = s1
-            self.plot_signals(t_input, s1, processed, is_discrete=params["is_discrete"])
 
-    def plot_signals(self, t, s1, processed, s2=None, is_discrete=False):
-        self.figure.clf()
-        n_plots = 3 if s2 is not None else 2
-        axs = self.figure.subplots(n_plots, 1)
-        axs = np.array(axs).flatten()
+        self.plot_signals(t_input, s1, t_processed, processed, s2, is_discrete)
 
-        for ax in axs:
-            ax.set_facecolor(self.theme["PANEL_COLOR"])
-            ax.grid(True, linestyle='--', alpha=0.3, color=self.theme["ACCENT_COLOR"])
-            ax.set_xlabel("Time (s)", color=self.theme["TEXT_COLOR"])
-            ax.set_ylabel("Amplitude", color=self.theme["TEXT_COLOR"])
-            ax.tick_params(colors=self.theme["TEXT_COLOR"])
-            ax.axhline(0, color="#22C0D5", linewidth=2, alpha=0.8)
-            ax.axvline(0, color="#22C0D5", linewidth=2, alpha=0.8)
+    def plot_signals(self, t_input, s1, t_processed, processed, s2=None, is_discrete=False):
+        ax = self.axs
+        ax.clear()
+
+        ax.set_facecolor(self.theme["PANEL_COLOR"])
+        ax.grid(True, linestyle='--', alpha=0.3, color=self.theme["ACCENT_COLOR"])
+        ax.set_xlabel("Time (s)", color=self.theme["TEXT_COLOR"])
+        ax.set_ylabel("Amplitude", color=self.theme["TEXT_COLOR"])
+        ax.tick_params(colors=self.theme["TEXT_COLOR"])
+        ax.axhline(0, color="#22C0D5", linewidth=2, alpha=0.8)
+        ax.axvline(0, color="#22C0D5", linewidth=2, alpha=0.8)
+        ax.set_title("Combined Signal Plot", color=self.theme["ACCENT_COLOR"])
         
-        # --- FIX START ---
-        # Helper function to correctly handle plotting for both modes
-        def plot_or_stem(ax, x_data, y_data, color):
+        ax.axvspan(0, 1, facecolor='#2c2c3a', alpha=0.6, zorder=0)
+
+        def plot_or_stem(ax, x_data, y_data, color, label, style='-'):
             if is_discrete:
-                # For stem, we set the color of each part individually
-                markerline, stemlines, baseline = ax.stem(x_data, y_data, basefmt=" ")
+                markerline, stemlines, baseline = ax.stem(x_data, y_data, label=label, basefmt=" ")
                 plt.setp(markerline, 'color', color)
-                plt.setp(stemlines, 'color', color)
+                if style == '--':
+                    plt.setp(stemlines, 'color', color, linestyle='dashed')
+                else:
+                    plt.setp(stemlines, 'color', color)
             else:
-                ax.plot(x_data, y_data, color=color, linewidth=2)
-        # --- FIX END ---
-
-        t_s1 = t[0] if isinstance(t, list) else t
-        t_processed = t[1] if isinstance(t, list) else t
+                ax.plot(x_data, y_data, color=color, linewidth=2, label=label, linestyle=style)
         
-        axs[0].set_title("Signal 1", color=self.theme["SIGNAL1_COLOR"])
-        plot_or_stem(axs[0], t_s1, s1, self.theme["SIGNAL1_COLOR"]) # Use helper
-
+        plot_or_stem(ax, t_input, s1, self.theme["SIGNAL1_COLOR"], label="Signal 1")
         if s2 is not None:
-            axs[1].set_title("Signal 2", color=self.theme["SIGNAL2_COLOR"])
-            plot_or_stem(axs[1], t, s2, self.theme["SIGNAL2_COLOR"]) # Use helper
-            axs[2].set_title("Resultant Signal", color=self.theme["RESULT_COLOR"])
-            plot_or_stem(axs[2], t, processed, self.theme["RESULT_COLOR"]) # Use helper
-        else:
-            axs[1].set_title("Processed Signal", color=self.theme["RESULT_COLOR"])
-            plot_or_stem(axs[1], t_processed, processed, self.theme["RESULT_COLOR"]) # Use helper
-            
+            plot_or_stem(ax, t_input, s2, self.theme["SIGNAL2_COLOR"], label="Signal 2")
+        
+        plot_or_stem(ax, t_processed, processed, self.theme["RESULT_COLOR"], label="Processed", style='--')
+
+        x_min = min(np.min(t_input), np.min(t_processed))
+        x_max = max(np.max(t_input), np.max(t_processed))
+        x_range = x_max - x_min
+        if x_range > 1e-9:
+            x_padding = x_range * 0.05
+            ax.set_xlim(x_min - x_padding, x_max + x_padding)
+
+        all_y_values = np.concatenate([s1, processed, s2 if s2 is not None else []])
+        y_min, y_max = np.min(all_y_values), np.max(all_y_values)
+        y_range = y_max - y_min
+        if y_range > 1e-9:
+            y_padding = y_range * 0.1
+            ax.set_ylim(y_min - y_padding, y_max + y_padding)
+
+        ax.legend(facecolor=self.theme["PANEL_COLOR"], edgecolor=self.theme["ACCENT_COLOR"], labelcolor=self.theme["TEXT_COLOR"])
+
+        operation = self.operation_type.get()
+        param = self.param_var.get()
+        info_text = f"Operation: {operation}\n"
+        if operation == "Time Scaling":
+            info_text += f"Factor (a): {param:.2f}"
+        elif operation == "Amplitude Scaling":
+            info_text += f"Amplitude (A): {param:.2f}"
+        elif operation == "Time Shifting":
+            info_text += f"Shift (t₀): {param:.2f}"
+        elif operation in ["Signal Addition", "Signal Multiplication", "Time Reversal"]:
+             info_text = f"Operation: {operation}"
+
+        ax.text(0.98, 0.98, info_text, transform=ax.transAxes, fontsize=11,
+                verticalalignment='top', horizontalalignment='right',
+                bbox=dict(boxstyle='round', facecolor=self.theme["SLIDER_BG"], alpha=0.8, edgecolor=self.theme["ACCENT_COLOR"]))
+
         self.figure.tight_layout()
         self.canvas_plot.draw()
         
-        def format_coord(x, y, ax, t_data, y_data):
-            idx = (np.abs(t_data - x)).argmin()
-            if 0 <= idx < len(y_data):
-                return f"x={t_data[idx]:.3f}, y={y_data[idx]:.3f}"
-            return f"x={x:.3f}, y={y:.3f}"
-
         if hasattr(self, 'hover_cid'):
             self.canvas_plot.mpl_disconnect(self.hover_cid)
         if hasattr(self, 'hover_label'):
             self.hover_label.destroy()
-        self.hover_label = Label(self.canvas_plot.get_tk_widget(), bg="#222233", fg="#39FF14", font=("Helvetica Neue", 12, "bold"), bd=1, relief="solid")
+            
+        self.hover_label = Label(self.canvas_plot.get_tk_widget(), bg="#222233", fg="#39FF14", font=("Helvetica Neue", 12, "bold"), bd=1, relief="solid", justify='left')
         self.hover_label.place_forget()
 
         def on_motion(event):
             if event.inaxes:
-                ax = event.inaxes
-                try:
-                    ax_idx = list(axs).index(ax)
-                except ValueError:
-                    return
+                text_lines = []
+                x = event.xdata
                 
-                if ax_idx == 0:
-                    y_data = s1
-                    t_data = t[0] if isinstance(t, list) else t
-                elif ax_idx == 1 and s2 is not None:
-                    y_data = s2
-                    t_data = t
-                else:
-                    y_data = processed
-                    t_data = t[1] if isinstance(t, list) else t
+                idx1 = (np.abs(t_input - x)).argmin()
+                if idx1 < len(s1):
+                    text_lines.append(f"S1: (x={t_input[idx1]:.2f}, y={s1[idx1]:.2f})")
                 
-                text = format_coord(event.xdata, event.ydata, ax, t_data, y_data)
-                self.hover_label.config(text=text)
-                self.hover_label.place(x=event.x + 10, y=event.y + 10)
+                if s2 is not None:
+                    idx2 = (np.abs(t_input - x)).argmin()
+                    if idx2 < len(s2):
+                        text_lines.append(f"S2: (x={t_input[idx2]:.2f}, y={s2[idx2]:.2f})")
+                    
+                idx_p = (np.abs(t_processed - x)).argmin()
+                if idx_p < len(processed):
+                    text_lines.append(f"Proc: (x={t_processed[idx_p]:.2f}, y={processed[idx_p]:.2f})")
+                
+                self.hover_label.config(text="\n".join(text_lines))
+                self.hover_label.place(x=event.x + 15, y=event.y + 15)
             else:
                 self.hover_label.place_forget()
 
@@ -418,6 +479,31 @@ class SignalGUI:
             elif sig_type == "Ramp":
                 return amp * t
         return np.zeros_like(t)
+
+    def save_main_plot(self):
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".png",
+            filetypes=[("PNG files", "*.png"), ("All files", "*.*")],
+            title="Save Combined Plot As..."
+        )
+        if file_path:
+            watermark_text = self.figure.text(0.98, 0.02, 'WaveLab',
+                                              fontsize=12, color='#cccccc',
+                                              ha='right', va='bottom', alpha=0.4,
+                                              transform=self.figure.transFigure)
+            try:
+                self.figure.savefig(
+                    file_path,
+                    dpi=300,
+                    bbox_inches='tight',
+                    facecolor=self.figure.get_facecolor()
+                )
+                messagebox.showinfo("Save Successful", f"Plot saved to:\n{file_path}")
+            except Exception as e:
+                messagebox.showerror("Save Error", f"An error occurred while saving the plot:\n{e}")
+            finally:
+                watermark_text.remove()
+                self.canvas_plot.draw()
 
     def open_signals_window(self):
         params = self.get_current_params()
@@ -444,8 +530,6 @@ class SignalGUI:
             ax.axhline(0, color="#22C0D5", linewidth=1, alpha=0.7)
             ax.axvline(0, color="#22C0D5", linewidth=1, alpha=0.7)
 
-        # --- FIX START ---
-        # Re-use the same robust plotting helper here
         def plot_or_stem(ax, x_data, y_data, color):
             if is_discrete:
                 markerline, stemlines, baseline = ax.stem(x_data, y_data, basefmt=" ")
@@ -453,7 +537,6 @@ class SignalGUI:
                 plt.setp(stemlines, 'color', color)
             else:
                 ax.plot(x_data, y_data, color=color, linewidth=2)
-        # --- FIX END ---
 
         if operation in ["Signal Addition", "Signal Multiplication"]:
             fig, axs = plt.subplots(3, 1, figsize=(8, 8))
@@ -474,18 +557,18 @@ class SignalGUI:
 
             if operation == "Time Shifting":
                 t0 = params["param"]
-                t_output = np.linspace(t0, 1 + t0, num_points)
-                processed = self.generate_signal(params["signal_type"], t_output - t0, params["amp1"], params["freq1"], params["phase1"])
+                t_output = t_input + t0
+                processed = s1
                 title2 = "Shifted Signal"
             elif operation == "Time Scaling":
                 a = params["param"]
                 if a != 0:
-                    t_output = np.linspace(min(0/a, 1/a), max(0/a, 1/a), num_points)
-                processed = self.generate_signal(params["signal_type"], t_output * a, params["amp1"], params["freq1"], params["phase1"])
+                    t_output = t_input / a
+                processed = s1
                 title2 = "Time-Scaled Signal"
             elif operation == "Time Reversal":
-                t_output = np.linspace(-1, 0, num_points)
-                processed = self.generate_signal(params["signal_type"], -t_output, params["amp1"], params["freq1"], params["phase1"])
+                t_output = -t_input
+                processed = s1
                 title2 = "Reversed Signal"
             elif operation == "Amplitude Scaling":
                 processed = params["param"] * s1
@@ -506,8 +589,16 @@ class SignalGUI:
             def save_png():
                 file_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG files", "*.png")], title="Save plot as PNG")
                 if file_path:
-                    fig.savefig(file_path, dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor())
-                    messagebox.showinfo("Saved", f"Plot saved as:\n{file_path}")
+                    watermark_text = fig.text(0.98, 0.02, 'WaveLab',
+                                              fontsize=12, color='#cccccc',
+                                              ha='right', va='bottom', alpha=0.4,
+                                              transform=fig.transFigure)
+                    try:
+                        fig.savefig(file_path, dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor())
+                        messagebox.showinfo("Saved", f"Plot saved as:\n{file_path}")
+                    finally:
+                        watermark_text.remove()
+                        canvas.draw()
 
             save_btn = Button(win, text="Save as PNG", font=("Helvetica Neue", 14, "bold"),
                               bg=self.theme["BTN_COLOR"], fg=self.theme["BTN_TEXT_COLOR"], command=save_png)
