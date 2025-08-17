@@ -15,9 +15,9 @@ NEON_DARK_THEME = {
     "TEXT_COLOR": "#00FFFF",
     "BTN_COLOR": "#53C4F1",
     "BTN_TEXT_COLOR": "#101014",
-    "SIGNAL1_COLOR": "#39FF14",
-    "SIGNAL2_COLOR": "#00FFFF",
-    "RESULT_COLOR": "#FF00FF",
+    "SIGNAL1_COLOR": "#B4C6F5",
+    "SIGNAL2_COLOR": "#F9CC98",
+    "RESULT_COLOR": "#39FF14",
     "SLIDER_BG": "#222233",
 }
 
@@ -87,15 +87,31 @@ class SignalGUI:
         canvas.bind("<Configure>", on_canvas_configure)
         
         def on_mousewheel(event):
-            if control_panel_container.winfo_containing(event.x_root, event.y_root) == control_panel_container:
-                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            widget_under_cursor = master.winfo_containing(event.x_root, event.y_root)
+            if widget_under_cursor:
+                # Check if the widget is the container or a child of the container
+                current_widget = widget_under_cursor
+                while current_widget is not None:
+                    if current_widget == control_panel_container:
+                        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+                        break
+                    current_widget = current_widget.master
         
         def on_linux_scroll(event):
-             if control_panel_container.winfo_containing(event.x_root, event.y_root) == control_panel_container:
-                if event.num == 4:
-                    canvas.yview_scroll(-1, "units")
-                elif event.num == 5:
-                    canvas.yview_scroll(1, "units")
+            widget_under_cursor = master.winfo_containing(event.x_root, event.y_root)
+            if widget_under_cursor:
+                # Check if the widget is the container or a child of the container
+                current_widget = widget_under_cursor
+                while current_widget is not None:
+                    if current_widget == control_panel_container:
+                        scroll_amount = 0
+                        if event.num == 4:
+                            scroll_amount = -1
+                        elif event.num == 5:
+                            scroll_amount = 1
+                        canvas.yview_scroll(scroll_amount, "units")
+                        break
+                    current_widget = current_widget.master
 
         master.bind_all("<MouseWheel>", on_mousewheel)
         master.bind_all("<Button-4>", on_linux_scroll)
@@ -131,16 +147,20 @@ class SignalGUI:
         self.signal2_frame = Frame(control_frame, bg=self.theme["PANEL_COLOR"])
         Label(self.signal2_frame, text="Signal 2 Type", bg=self.theme["PANEL_COLOR"], fg=self.theme["TEXT_COLOR"], font=("Helvetica Neue", 16, "bold")).pack(anchor="w", padx=15, pady=(15, 5))
         self.signal2_type = StringVar(master, "Sine")
-        OptionMenu(self.signal2_frame, self.signal2_type, "Sine", "Square", "Sawtooth", "Step", "Impulse", "Ramp").pack(fill="x", padx=15, pady=5)
+        signal2_type_menu = OptionMenu(self.signal2_frame, self.signal2_type, "Sine", "Square", "Sawtooth", "Step", "Impulse", "Ramp").pack(fill="x", padx=15, pady=5)
 
         self.amp2_var = DoubleVar(value=1.0)
-        self.amp2_label = self.add_slider(self.signal2_frame, "Amplitude", self.amp2_var, 0.1, 5.0, 0.1, self.theme["SIGNAL2_COLOR"])
+        self.amp2_label = self.add_slider(self.signal2_frame, "Amplitude", self.amp2_var, 0.1, 5.0, 0.1, self.theme["SIGNAL1_COLOR"])
 
-        self.freq2_var = DoubleVar(value=5.0)
-        self.freq2_label = self.add_slider(self.signal2_frame, "Frequency", self.freq2_var, 1.0, 20.0, 1.0, self.theme["RESULT_COLOR"])
+        self.freq2_var = DoubleVar(value=1.0)
+        self.freq2_label = self.add_slider(self.signal2_frame, "Frequency", self.freq2_var, 1.0, 20.0, 1.0, self.theme["SIGNAL2_COLOR"])
 
         self.phase2_var = DoubleVar(value=0.0)
-        self.phase2_label = self.add_slider(self.signal2_frame, "Phase (°)", self.phase2_var, 0, 360, 1, self.theme["ACCENT_COLOR"])
+        phase2_frame = Frame(self.signal2_frame, bg=self.theme["PANEL_COLOR"])
+        phase2_frame.pack(fill="x", padx=15, pady=(10, 0))
+        Label(phase2_frame, text="Phase (°):", bg=self.theme["PANEL_COLOR"], fg=self.theme["RESULT_COLOR"], font=("Helvetica Neue", 14, "bold")).pack(side="left")
+        phase2_entry = tk.Entry(phase2_frame, textvariable=self.phase2_var, font=("Helvetica Neue", 14), width=8, bg=self.theme["BG_COLOR"], fg=self.theme["RESULT_COLOR"])
+        phase2_entry.pack(side="left", padx=(10, 0))
 
         # Parameter slider
         self.param_var = DoubleVar(value=1.0)
@@ -157,10 +177,10 @@ class SignalGUI:
         view_options_frame = Frame(control_frame, bg=self.theme["PANEL_COLOR"])
         view_options_frame.pack(fill="x", padx=15, pady=(10, 5))
         self.is_discrete_var = BooleanVar(value=False)
-        discrete_check = Checkbutton(view_options_frame, text="Discrete Time", variable=self.is_discrete_var,
+        discrete_check = Checkbutton(view_options_frame, text="DISCRETE TIME", variable=self.is_discrete_var,
                                        bg=self.theme["PANEL_COLOR"], fg=self.theme["TEXT_COLOR"],
                                        selectcolor=self.theme["BG_COLOR"], activebackground=self.theme["PANEL_COLOR"],
-                                       font=("Helvetica Neue", 14, "bold"), command=self.toggle_discrete_controls)
+                                       font=("Helvetica Neue", 16, "bold"), command=self.toggle_discrete_controls)
         discrete_check.pack(side="left")
 
         self.samples_frame = Frame(control_frame, bg=self.theme["PANEL_COLOR"])
@@ -178,7 +198,7 @@ class SignalGUI:
         self.show_all_button.pack(pady=(0, 10), fill="x", padx=15)
 
         self.save_button = Button(control_frame, text="Save This Plot", font=("Helvetica Neue", 16, "bold"),
-                                  command=self.save_main_plot, bg="#FFA500", fg=self.theme["BTN_TEXT_COLOR"], relief="flat")
+                                  command=self.save_main_plot, bg="#EC49D4", fg=self.theme["BTN_TEXT_COLOR"], relief="flat")
         self.save_button.pack(pady=(0, 20), fill="x", padx=15)
 
         # Reset button
@@ -369,28 +389,28 @@ class SignalGUI:
         ax.set_xlabel("Time (s)", color=self.theme["TEXT_COLOR"])
         ax.set_ylabel("Amplitude", color=self.theme["TEXT_COLOR"])
         ax.tick_params(colors=self.theme["TEXT_COLOR"])
-        ax.axhline(0, color="#22C0D5", linewidth=2, alpha=0.8)
-        ax.axvline(0, color="#22C0D5", linewidth=2, alpha=0.8)
+        ax.axhline(0, color="#EDF344", linewidth=2, alpha=0.8) 
+        ax.axvline(0, color="#EDF344", linewidth=2, alpha=0.8)
         ax.set_title("Combined Signal Plot", color=self.theme["ACCENT_COLOR"])
         
         ax.axvspan(0, 1, facecolor='#2c2c3a', alpha=0.6, zorder=0)
 
-        def plot_or_stem(ax, x_data, y_data, color, label, style='-'):
+        def plot_or_stem(ax, x_data, y_data, color, label, style='-', linewidth=1.5):
             if is_discrete:
                 markerline, stemlines, baseline = ax.stem(x_data, y_data, label=label, basefmt=" ")
                 plt.setp(markerline, 'color', color)
                 if style == '--':
-                    plt.setp(stemlines, 'color', color, linestyle='dashed')
+                    plt.setp(stemlines, 'color', color, linestyle='dashed', linewidth=linewidth)
                 else:
-                    plt.setp(stemlines, 'color', color)
+                    plt.setp(stemlines, 'color', color, linewidth=linewidth)
             else:
-                ax.plot(x_data, y_data, color=color, linewidth=2, label=label, linestyle=style)
+                ax.plot(x_data, y_data, color=color, linewidth=linewidth, label=label, linestyle=style)
         
         plot_or_stem(ax, t_input, s1, self.theme["SIGNAL1_COLOR"], label="Signal 1")
         if s2 is not None:
             plot_or_stem(ax, t_input, s2, self.theme["SIGNAL2_COLOR"], label="Signal 2")
         
-        plot_or_stem(ax, t_processed, processed, self.theme["RESULT_COLOR"], label="Processed", style='--')
+        plot_or_stem(ax, t_processed, processed, self.theme["RESULT_COLOR"], label="Processed", style='-', linewidth=3)
 
         x_min = min(np.min(t_input), np.min(t_processed))
         x_max = max(np.max(t_input), np.max(t_processed))
