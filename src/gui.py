@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import ttk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
+
 plt.style.use('dark_background')
 
 # Neon Dark Theme (unchanged)
@@ -52,14 +53,16 @@ class SignalGUI:
         main_frame.grid_columnconfigure(1, weight=2) 
         main_frame.grid_rowconfigure(0, weight=1)
 
-        # --- REFINED SCALABLE CONTROL PANEL ---
+                # --- REFINED SCALABLE CONTROL PANEL ---
+        #
+        # REFINED SCALABLE CONTROL PANEL
         control_panel_container = Frame(main_frame, bg=self.theme["PANEL_COLOR"], highlightbackground="#222233", highlightthickness=1)
         control_panel_container.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         control_panel_container.grid_rowconfigure(0, weight=1)
         control_panel_container.grid_columnconfigure(0, weight=1)
 
         canvas = Canvas(control_panel_container, bg=self.theme["PANEL_COLOR"], highlightthickness=0)
-        
+
         style = ttk.Style()
         style.theme_use('clam')
         style.configure("Vertical.TScrollbar", gripcount=0,
@@ -69,49 +72,88 @@ class SignalGUI:
         scrollbar = ttk.Scrollbar(control_panel_container, orient="vertical", command=canvas.yview, style="Vertical.TScrollbar")
         canvas.configure(yscrollcommand=scrollbar.set)
 
+        # We initially place the scrollbar with .grid() but will hide it if not needed.
+        # The grid manager will remember its options.
         scrollbar.grid(row=0, column=1, sticky='ns')
         canvas.grid(row=0, column=0, sticky='nsew')
 
         control_frame = Frame(canvas, bg=self.theme["PANEL_COLOR"])
         frame_id = canvas.create_window((0, 0), window=control_frame, anchor="nw")
 
-        def on_frame_configure(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
 
-        # --- NEW: BINDING TO MAKE THE FRAME WIDTH SCALABLE ---
-        def on_canvas_configure(event):
+        # --- START OF MODIFIED SECTION ---
+
+        def _update_scrollbar_visibility(event=None):
+            """
+            Checks if the scrollbar is needed based on content height vs. canvas height.
+            Shows or hides the scrollbar accordingly.
+            """
+            # Update the scrollregion to encompass the entire height of the control_frame
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            
+            # Bbox returns (x1, y1, x2, y2); index 3 is the bottom coordinate (total height)
+            content_height = canvas.bbox("all")[3] 
+            
+            # Get the current visible height of the canvas widget
+            canvas_height = canvas.winfo_height()
+
+            # If the content is taller than the canvas, the scrollbar is needed
+            if content_height > canvas_height:
+                # Show the scrollbar using grid. It remembers its last options (row, column, sticky).
+                scrollbar.grid()
+            else:
+                # If content fits, hide the scrollbar.
+                scrollbar.grid_forget()
+
+        def _on_canvas_configure(event):
+            """
+            Called when the canvas is resized. Scales the inner frame's width
+            and then checks if the scrollbar should be visible.
+            """
             # This makes the inner frame scale with the canvas's width
             canvas.itemconfig(frame_id, width=event.width)
-        
-        control_frame.bind("<Configure>", on_frame_configure)
-        canvas.bind("<Configure>", on_canvas_configure)
-        
+            _update_scrollbar_visibility()
+
+
+        # When the control_frame's content changes size, check if we need a scrollbar.
+        control_frame.bind("<Configure>", _update_scrollbar_visibility)
+
+        # When the canvas itself is resized (e.g., main window resize), update the frame width
+        # and also re-check if we need the scrollbar.
+        canvas.bind("<Configure>", _on_canvas_configure)
+
+        # --- END OF MODIFIED SECTION ---
+
+
         def on_mousewheel(event):
-            widget_under_cursor = master.winfo_containing(event.x_root, event.y_root)
-            if widget_under_cursor:
-                # Check if the widget is the container or a child of the container
-                current_widget = widget_under_cursor
-                while current_widget is not None:
-                    if current_widget == control_panel_container:
-                        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-                        break
-                    current_widget = current_widget.master
-        
+            # Check if the scrollbar is currently visible before scrolling
+            if scrollbar.winfo_ismapped():
+                widget_under_cursor = master.winfo_containing(event.x_root, event.y_root)
+                if widget_under_cursor:
+                    current_widget = widget_under_cursor
+                    while current_widget is not None:
+                        if current_widget == control_panel_container:
+                            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+                            break
+                        current_widget = current_widget.master
+
         def on_linux_scroll(event):
-            widget_under_cursor = master.winfo_containing(event.x_root, event.y_root)
-            if widget_under_cursor:
-                # Check if the widget is the container or a child of the container
-                current_widget = widget_under_cursor
-                while current_widget is not None:
-                    if current_widget == control_panel_container:
-                        scroll_amount = 0
-                        if event.num == 4:
-                            scroll_amount = -1
-                        elif event.num == 5:
-                            scroll_amount = 1
-                        canvas.yview_scroll(scroll_amount, "units")
-                        break
-                    current_widget = current_widget.master
+            # Check if the scrollbar is currently visible before scrolling
+            if scrollbar.winfo_ismapped():
+                widget_under_cursor = master.winfo_containing(event.x_root, event.y_root)
+                if widget_under_cursor:
+                    current_widget = widget_under_cursor
+                    while current_widget is not None:
+                        if current_widget == control_panel_container:
+                            scroll_amount = 0
+                            if event.num == 4:
+                                scroll_amount = -1
+                            elif event.num == 5:
+                                scroll_amount = 1
+                            canvas.yview_scroll(scroll_amount, "units")
+                            break
+                        current_widget = current_widget.master
+
 
         master.bind_all("<MouseWheel>", on_mousewheel)
         master.bind_all("<Button-4>", on_linux_scroll)
@@ -123,7 +165,8 @@ class SignalGUI:
         signal_type_menu = OptionMenu(control_frame, self.signal_type, "Sine", "Square", "Sawtooth", "Step", "Impulse", "Ramp")
         signal_type_menu.config(font=("Helvetica Neue", 14))
         signal_type_menu.pack(fill="x", padx=15, pady=5)
-
+        menu = signal_type_menu["menu"]
+        menu.config(font=("Helvetica Neue", 15))
         self.amp1_var = DoubleVar(value=1.0)
         self.amp1_label = self.add_slider(control_frame, "Amplitude", self.amp1_var, 0.1, 5.0, 0.1, self.theme["SIGNAL1_COLOR"])
 
@@ -142,13 +185,19 @@ class SignalGUI:
         operation_menu = OptionMenu(control_frame, self.operation_type, *OPERATION_FORMULAS.keys(), command=self.update_parameter_controls)
         operation_menu.config(font=("Helvetica Neue", 14))
         operation_menu.pack(fill="x", padx=15, pady=5)
+        menu = operation_menu["menu"]
+        menu.config(font=("Helvetica Neue", 15))
 
         # Signal 2 controls (for addition/multiplication)
         self.signal2_frame = Frame(control_frame, bg=self.theme["PANEL_COLOR"])
         Label(self.signal2_frame, text="Signal 2 Type", bg=self.theme["PANEL_COLOR"], fg=self.theme["TEXT_COLOR"], font=("Helvetica Neue", 16, "bold")).pack(anchor="w", padx=15, pady=(15, 5))
         self.signal2_type = StringVar(master, "Sine")
-        signal2_type_menu = OptionMenu(self.signal2_frame, self.signal2_type, "Sine", "Square", "Sawtooth", "Step", "Impulse", "Ramp").pack(fill="x", padx=15, pady=5)
-
+        signal2_type_menu = OptionMenu(self.signal2_frame, self.signal2_type, "Sine", "Square", "Sawtooth", "Step", "Impulse", "Ramp")
+        signal2_type_menu.pack(fill="x", padx=15, pady=5)
+        signal2_type_menu.config(font=("Helvetica Neue", 14)) 
+        menu = signal2_type_menu["menu"]
+        menu.config(font=("Helvetica Neue", 15))
+        
         self.amp2_var = DoubleVar(value=1.0)
         self.amp2_label = self.add_slider(self.signal2_frame, "Amplitude", self.amp2_var, 0.1, 5.0, 0.1, self.theme["SIGNAL1_COLOR"])
 
@@ -205,7 +254,8 @@ class SignalGUI:
         self.reset_button = Button(control_frame, text="Reset to Default", font=("Helvetica Neue", 14, "bold"),
                                   command=self.reset_parameters, bg=self.theme["ACCENT_COLOR"], fg=self.theme["BTN_TEXT_COLOR"])
         self.reset_button.pack(pady=(0, 20), fill="x", padx=15)
-
+        
+       
         # Right panel - Plots
         plot_frame = Frame(main_frame, bg=self.theme["PANEL_COLOR"], highlightbackground="#222233", highlightthickness=1)
         plot_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
