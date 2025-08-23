@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import tkinter as tk
 from tkinter import ttk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backend_bases import MouseEvent
 
 
 plt.style.use('dark_background')
@@ -50,12 +51,10 @@ class SignalGUI:
         main_frame = Frame(master, bg=self.theme["BG_COLOR"])
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
         main_frame.grid_columnconfigure(0, weight=1)
-        main_frame.grid_columnconfigure(1, weight=2) 
+        main_frame.grid_columnconfigure(1, weight=2)
         main_frame.grid_rowconfigure(0, weight=1)
 
-                # --- REFINED SCALABLE CONTROL PANEL ---
-        #
-        # REFINED SCALABLE CONTROL PANEL
+        # --- REFINED SCALABLE CONTROL PANEL ---
         control_panel_container = Frame(main_frame, bg=self.theme["PANEL_COLOR"], highlightbackground="#222233", highlightthickness=1)
         control_panel_container.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         control_panel_container.grid_rowconfigure(0, weight=1)
@@ -72,8 +71,6 @@ class SignalGUI:
         scrollbar = ttk.Scrollbar(control_panel_container, orient="vertical", command=canvas.yview, style="Vertical.TScrollbar")
         canvas.configure(yscrollcommand=scrollbar.set)
 
-        # We initially place the scrollbar with .grid() but will hide it if not needed.
-        # The grid manager will remember its options.
         scrollbar.grid(row=0, column=1, sticky='ns')
         canvas.grid(row=0, column=0, sticky='nsew')
 
@@ -81,84 +78,49 @@ class SignalGUI:
         frame_id = canvas.create_window((0, 0), window=control_frame, anchor="nw")
 
 
-        # --- START OF MODIFIED SECTION ---
-
         def _update_scrollbar_visibility(event=None):
-            """
-            Checks if the scrollbar is needed based on content height vs. canvas height.
-            Shows or hides the scrollbar accordingly.
-            """
-            # Update the scrollregion to encompass the entire height of the control_frame
             canvas.configure(scrollregion=canvas.bbox("all"))
-            
-            # Bbox returns (x1, y1, x2, y2); index 3 is the bottom coordinate (total height)
-            content_height = canvas.bbox("all")[3] 
-            
-            # Get the current visible height of the canvas widget
+            content_height = canvas.bbox("all")[3]
             canvas_height = canvas.winfo_height()
-
-            # If the content is taller than the canvas, the scrollbar is needed
             if content_height > canvas_height:
-                # Show the scrollbar using grid. It remembers its last options (row, column, sticky).
                 scrollbar.grid()
             else:
-                # If content fits, hide the scrollbar.
                 scrollbar.grid_forget()
 
         def _on_canvas_configure(event):
-            """
-            Called when the canvas is resized. Scales the inner frame's width
-            and then checks if the scrollbar should be visible.
-            """
-            # This makes the inner frame scale with the canvas's width
             canvas.itemconfig(frame_id, width=event.width)
             _update_scrollbar_visibility()
 
-
-        # When the control_frame's content changes size, check if we need a scrollbar.
         control_frame.bind("<Configure>", _update_scrollbar_visibility)
-
-        # When the canvas itself is resized (e.g., main window resize), update the frame width
-        # and also re-check if we need the scrollbar.
         canvas.bind("<Configure>", _on_canvas_configure)
 
-        # --- END OF MODIFIED SECTION ---
-
-
         def on_mousewheel(event):
-            # Check if the scrollbar is currently visible before scrolling
             if scrollbar.winfo_ismapped():
                 widget_under_cursor = master.winfo_containing(event.x_root, event.y_root)
-                if widget_under_cursor:
-                    current_widget = widget_under_cursor
-                    while current_widget is not None:
-                        if current_widget == control_panel_container:
-                            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-                            break
-                        current_widget = current_widget.master
+                current_widget = widget_under_cursor
+                while current_widget is not None:
+                    if current_widget == control_panel_container:
+                        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+                        break
+                    current_widget = getattr(current_widget, 'master', None)
+
 
         def on_linux_scroll(event):
-            # Check if the scrollbar is currently visible before scrolling
             if scrollbar.winfo_ismapped():
                 widget_under_cursor = master.winfo_containing(event.x_root, event.y_root)
-                if widget_under_cursor:
-                    current_widget = widget_under_cursor
-                    while current_widget is not None:
-                        if current_widget == control_panel_container:
-                            scroll_amount = 0
-                            if event.num == 4:
-                                scroll_amount = -1
-                            elif event.num == 5:
-                                scroll_amount = 1
-                            canvas.yview_scroll(scroll_amount, "units")
-                            break
-                        current_widget = current_widget.master
+                current_widget = widget_under_cursor
+                while current_widget is not None:
+                    if current_widget == control_panel_container:
+                        scroll_amount = -1 if event.num == 4 else 1
+                        canvas.yview_scroll(scroll_amount, "units")
+                        break
+                    current_widget = getattr(current_widget, 'master', None)
 
 
         master.bind_all("<MouseWheel>", on_mousewheel)
         master.bind_all("<Button-4>", on_linux_scroll)
         master.bind_all("<Button-5>", on_linux_scroll)
-        
+
         # Signal 1 controls
         self.signal_type = StringVar(master, "Sine")
         Label(control_frame, text="Signal 1 Type", bg=self.theme["PANEL_COLOR"], fg=self.theme["TEXT_COLOR"], font=("Helvetica Neue", 16, "bold")).pack(anchor="w", padx=15, pady=(15, 5))
@@ -194,10 +156,10 @@ class SignalGUI:
         self.signal2_type = StringVar(master, "Sine")
         signal2_type_menu = OptionMenu(self.signal2_frame, self.signal2_type, "Sine", "Square", "Sawtooth", "Step", "Impulse", "Ramp")
         signal2_type_menu.pack(fill="x", padx=15, pady=5)
-        signal2_type_menu.config(font=("Helvetica Neue", 14)) 
+        signal2_type_menu.config(font=("Helvetica Neue", 14))
         menu = signal2_type_menu["menu"]
         menu.config(font=("Helvetica Neue", 15))
-        
+
         self.amp2_var = DoubleVar(value=1.0)
         self.amp2_label = self.add_slider(self.signal2_frame, "Amplitude", self.amp2_var, 0.1, 5.0, 0.1, self.theme["SIGNAL1_COLOR"])
 
@@ -215,9 +177,9 @@ class SignalGUI:
         self.param_var = DoubleVar(value=1.0)
         self.param_label = Label(control_frame, text="Scaling factor (a):", bg=self.theme["PANEL_COLOR"], fg=self.theme["ACCENT_COLOR"], font=("Helvetica Neue", 14, "bold"))
         self.param_slider = ttk.Scale(control_frame, from_=0.1, to=5.0, variable=self.param_var, orient="horizontal", style="Scaling.Horizontal.TScale")
-        
+
         style.configure("Scaling.Horizontal.TScale", troughcolor=self.theme["SLIDER_BG"], background=self.theme["ACCENT_COLOR"], thickness=8)
-        
+
         # Formula display
         self.formula_label = Label(control_frame, text="Formula: x(at)", bg=self.theme["PANEL_COLOR"], fg=self.theme["ACCENT_COLOR"], font=("Helvetica Neue", 14, "italic"))
         self.formula_label.pack(pady=10)
@@ -235,7 +197,7 @@ class SignalGUI:
         self.samples_frame = Frame(control_frame, bg=self.theme["PANEL_COLOR"])
         self.samples_var = IntVar(value=50)
         self.samples_label = self.add_slider(self.samples_frame, "Number of Samples", self.samples_var, 10, 200, 1, self.theme["ACCENT_COLOR"])
-        
+
         # Process and show buttons
         self.process_button = Button(control_frame, text="Process Signal", font=("Helvetica Neue", 18, "bold"),
                                      command=self.process_signal, bg=self.theme["BTN_COLOR"], fg=self.theme["BTN_TEXT_COLOR"],
@@ -254,22 +216,20 @@ class SignalGUI:
         self.reset_button = Button(control_frame, text="Reset to Default", font=("Helvetica Neue", 14, "bold"),
                                   command=self.reset_parameters, bg=self.theme["ACCENT_COLOR"], fg=self.theme["BTN_TEXT_COLOR"])
         self.reset_button.pack(pady=(0, 20), fill="x", padx=15)
-        
-       
+
+
         # Right panel - Plots
-        plot_frame = Frame(main_frame, bg=self.theme["PANEL_COLOR"], highlightbackground="#222233", highlightthickness=1)
-        plot_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
-        
+        self.plot_frame = Frame(main_frame, bg=self.theme["PANEL_COLOR"], highlightbackground="#222233", highlightthickness=1) # <-- FIX 1
+        self.plot_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
+
         self.figure, self.axs = plt.subplots(1, 1, figsize=(6, 6))
         self.figure.patch.set_facecolor(self.theme["PANEL_COLOR"])
-        self.canvas_plot = FigureCanvasTkAgg(self.figure, master=plot_frame)
+        self.canvas_plot = FigureCanvasTkAgg(self.figure, master=self.plot_frame) # <-- FIX 2
         self.canvas_plot.get_tk_widget().pack(fill="both", expand=True)
 
-        # Track last processed operation and parameters
         self.last_operation = None
         self.last_params = None
 
-        # Bind variable changes for dynamic update
         self.amp1_var.trace_add("write", lambda *args: self.dynamic_update())
         self.freq1_var.trace_add("write", lambda *args: self.dynamic_update())
         self.phase1_var.trace_add("write", lambda *args: self.dynamic_update())
@@ -286,6 +246,10 @@ class SignalGUI:
         self.update_parameter_controls(self.operation_type.get())
         self.toggle_discrete_controls()
 
+        # Initialize zoom/pan state variables
+        self.event_cids = []
+        self._dragging = False
+        self._drag_start = None
 
     def apply_theme(self):
         plt.style.use('dark_background')
@@ -298,18 +262,18 @@ class SignalGUI:
     def add_slider(self, parent, text, var, frm, to, step, color):
         frame = Frame(parent, bg=self.theme["PANEL_COLOR"])
         frame.pack(fill="x", padx=15, pady=(10, 0))
-        
+
         format_spec = "{:.0f}" if isinstance(var, IntVar) else "{:.2f}"
-        
+
         lbl = Label(frame, text=f"{text}: {format_spec.format(var.get())}", bg=self.theme["PANEL_COLOR"], fg=color, font=("Helvetica Neue", 14, "bold"))
         lbl.pack(side="left")
-        
+
         style = ttk.Style()
         style.theme_use('clam')
         style.configure(f"{text}.Horizontal.TScale", troughcolor=self.theme["SLIDER_BG"], background=color, thickness=8)
-        
+
         slider = ttk.Scale(frame, from_=frm, to=to, variable=var, orient="horizontal",
-                           style=f"{text}.Horizontal.TScale", 
+                           style=f"{text}.Horizontal.TScale",
                            command=lambda v, l=lbl, name=text: l.config(text=f"{name}: {format_spec.format(float(v))}"))
         slider.pack(side="right", fill="x", expand=True)
         return lbl
@@ -323,7 +287,7 @@ class SignalGUI:
 
         if operation in ["Signal Addition", "Signal Multiplication"]:
             self.signal2_frame.pack(before=before_formula, fill="x", pady=5)
-        
+
         param_controls_to_show = []
 
         if operation == "Time Scaling":
@@ -344,7 +308,7 @@ class SignalGUI:
                 widget.pack(before=before_formula, anchor="w", padx=15, pady=(15, 0))
             else:
                 widget.pack(before=before_formula, fill="x", padx=15, pady=5)
-        
+
         self.formula_label.config(text=f"Formula: {OPERATION_FORMULAS.get(operation, '')}")
 
         def update_label(val):
@@ -406,7 +370,7 @@ class SignalGUI:
             t0 = params["param"]
             t_processed = t_input + t0
             processed = s1
-        
+
         elif operation == "Time Scaling":
             a = params["param"]
             if a > 1e-9:
@@ -420,11 +384,11 @@ class SignalGUI:
         elif operation == "Time Reversal":
             t_processed = -t_input
             processed = s1
-            
+
         elif operation in ["Signal Addition", "Signal Multiplication"]:
             s2 = self.generate_signal(params["signal2_type"], t_input, params["amp2"], params["freq2"], params["phase2"])
             processed = s1 + s2 if operation == "Signal Addition" else s1 * s2
-        
+
         elif operation == "Amplitude Scaling":
             processed = params["param"] * s1
 
@@ -439,11 +403,9 @@ class SignalGUI:
         ax.set_xlabel("Time (s)", color=self.theme["TEXT_COLOR"])
         ax.set_ylabel("Amplitude", color=self.theme["TEXT_COLOR"])
         ax.tick_params(colors=self.theme["TEXT_COLOR"])
-        ax.axhline(0, color="#EDF344", linewidth=2, alpha=0.8) 
+        ax.axhline(0, color="#EDF344", linewidth=2, alpha=0.8)
         ax.axvline(0, color="#EDF344", linewidth=2, alpha=0.8)
         ax.set_title("Combined Signal Plot", color=self.theme["ACCENT_COLOR"])
-        
-        ax.axvspan(0, 1, facecolor='#2c2c3a', alpha=0.6, zorder=0)
 
         def plot_or_stem(ax, x_data, y_data, color, label, style='-', linewidth=1.5):
             if is_discrete:
@@ -455,99 +417,173 @@ class SignalGUI:
                     plt.setp(stemlines, 'color', color, linewidth=linewidth)
             else:
                 ax.plot(x_data, y_data, color=color, linewidth=linewidth, label=label, linestyle=style)
-        
+
         plot_or_stem(ax, t_input, s1, self.theme["SIGNAL1_COLOR"], label="Signal 1")
         if s2 is not None:
             plot_or_stem(ax, t_input, s2, self.theme["SIGNAL2_COLOR"], label="Signal 2")
-        
         plot_or_stem(ax, t_processed, processed, self.theme["RESULT_COLOR"], label="Processed", style='-', linewidth=3)
 
-        x_min = min(np.min(t_input), np.min(t_processed))
-        x_max = max(np.max(t_input), np.max(t_processed))
-        x_range = x_max - x_min
-        if x_range > 1e-9:
-            x_padding = x_range * 0.05
-            ax.set_xlim(x_min - x_padding, x_max + x_padding)
+        # Autoscale initially to fit the data
+        ax.relim()
+        ax.autoscale_view()
 
-        all_y_values = np.concatenate([s1, processed, s2 if s2 is not None else []])
-        y_min, y_max = np.min(all_y_values), np.max(all_y_values)
-        y_range = y_max - y_min
-        if y_range > 1e-9:
-            y_padding = y_range * 0.1
-            ax.set_ylim(y_min - y_padding, y_max + y_padding)
+        # Add some padding
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        x_range = xlim[1] - xlim[0]
+        y_range = ylim[1] - ylim[0]
+        ax.set_xlim(xlim[0] - x_range * 0.05, xlim[1] + x_range * 0.05)
+        ax.set_ylim(ylim[0] - y_range * 0.1, ylim[1] + y_range * 0.1)
 
         ax.legend(facecolor=self.theme["PANEL_COLOR"], edgecolor=self.theme["ACCENT_COLOR"], labelcolor=self.theme["TEXT_COLOR"])
 
         operation = self.operation_type.get()
         param = self.param_var.get()
         info_text = f"Operation: {operation}\n"
-        if operation == "Time Scaling":
-            info_text += f"Factor (a): {param:.2f}"
-        elif operation == "Amplitude Scaling":
-            info_text += f"Amplitude (A): {param:.2f}"
-        elif operation == "Time Shifting":
-            info_text += f"Shift (t₀): {param:.2f}"
-        elif operation in ["Signal Addition", "Signal Multiplication", "Time Reversal"]:
-             info_text = f"Operation: {operation}"
+        if operation == "Time Scaling": info_text += f"Factor (a): {param:.2f}"
+        elif operation == "Amplitude Scaling": info_text += f"Amplitude (A): {param:.2f}"
+        elif operation == "Time Shifting": info_text += f"Shift (t₀): {param:.2f}"
+        else: info_text = f"Operation: {operation}"
 
         ax.text(0.98, 0.98, info_text, transform=ax.transAxes, fontsize=11,
                 verticalalignment='top', horizontalalignment='right',
                 bbox=dict(boxstyle='round', facecolor=self.theme["SLIDER_BG"], alpha=0.8, edgecolor=self.theme["ACCENT_COLOR"]))
 
         self.figure.tight_layout()
-        self.canvas_plot.draw()
-        
-        if hasattr(self, 'hover_cid'):
-            self.canvas_plot.mpl_disconnect(self.hover_cid)
-        if hasattr(self, 'hover_label'):
-            self.hover_label.destroy()
-            
-        self.hover_label = Label(self.canvas_plot.get_tk_widget(), bg="#222233", fg="#39FF14", font=("Helvetica Neue", 12, "bold"), bd=1, relief="solid", justify='left')
+
+        # --- ZOOM/PAN/HOVER REWORK ---
+
+        # Clean up previous hover label and reset button if they exist
+        if hasattr(self, 'hover_label'): self.hover_label.destroy()
+        if hasattr(self, 'reset_zoom_btn'): self.reset_zoom_btn.destroy()
+
+        self.hover_label = Label(self.canvas_plot.get_tk_widget(), text="", bg="#222233", fg="#39FF14", font=("Helvetica Neue", 12, "bold"), bd=1, relief="solid", justify='left')
         self.hover_label.place_forget()
 
-        def on_motion(event):
-            if event.inaxes:
-                text_lines = []
-                x = event.xdata
-                
-                idx1 = (np.abs(t_input - x)).argmin()
-                if idx1 < len(s1):
-                    text_lines.append(f"S1: (x={t_input[idx1]:.2f}, y={s1[idx1]:.2f})")
-                
-                if s2 is not None:
-                    idx2 = (np.abs(t_input - x)).argmin()
-                    if idx2 < len(s2):
-                        text_lines.append(f"S2: (x={t_input[idx2]:.2f}, y={s2[idx2]:.2f})")
-                    
-                idx_p = (np.abs(t_processed - x)).argmin()
-                if idx_p < len(processed):
-                    text_lines.append(f"Proc: (x={t_processed[idx_p]:.2f}, y={processed[idx_p]:.2f})")
-                
-                self.hover_label.config(text="\n".join(text_lines))
-                self.hover_label.place(x=event.x + 15, y=event.y + 15)
-            else:
-                self.hover_label.place_forget()
+        # --- Define Event Handlers ---
 
-        self.hover_cid = self.canvas_plot.mpl_connect("motion_notify_event", on_motion)
+        self._dragging = False
+        self.drag_start = None
+
+        # Store initial limits for reset
+        ax.relim()
+        ax.autoscale_view()
+        self._initial_xlim = ax.get_xlim()
+        self._initial_ylim = ax.get_ylim()
+
+        def on_press(event):
+            if event.inaxes == ax and event.button == 1:
+                self._dragging = True
+                self.drag_start = (event.x, event.y, ax.get_xlim(), ax.get_ylim())
+
+        def on_release(event):
+            self._dragging = False
+            self.drag_start = None
+
+        def on_motion(event):
+            # --- Panning Logic ---
+            if self._dragging and self.drag_start is not None and event.inaxes == ax:
+                x0, y0, xlim0, ylim0 = self.drag_start
+                dx = event.x - x0
+                dy = event.y - y0
+
+                bbox = ax.get_window_extent().transformed(self.figure.dpi_scale_trans.inverted())
+                width, height = bbox.width * self.figure.dpi, bbox.height * self.figure.dpi
+                x_axis_move = dx / width * (xlim0[1] - xlim0[0])
+                y_axis_move = dy / height * (ylim0[1] - ylim0[0])
+
+                ax.set_xlim(xlim0[0] - x_axis_move, xlim0[1] - x_axis_move)
+                ax.set_ylim(ylim0[0] - y_axis_move, ylim0[1] - y_axis_move)
+                self.canvas_plot.draw()
+
+            # --- Hover Label Logic ---
+            elif not self._dragging:
+                if event.inaxes == ax and event.x is not None and event.y is not None:
+                    text_lines = []
+                    x = event.xdata
+
+                    idx1 = np.abs(t_input - x).argmin()
+                    text_lines.append(f"S1: (x={t_input[idx1]:.2f}, y={s1[idx1]:.2f})")
+
+                    if s2 is not None:
+                        idx2 = np.abs(t_input - x).argmin()
+                        text_lines.append(f"S2: (x={t_input[idx2]:.2f}, y={s2[idx2]:.2f})")
+
+                    idx_p = np.abs(t_processed - x).argmin()
+                    text_lines.append(f"Proc: (x={t_processed[idx_p]:.2f}, y={processed[idx_p]:.2f})")
+
+                    self.hover_label.config(text="\n".join(text_lines))
+                    # Place the label slightly offset from the cursor to avoid overlap
+                    widget = self.canvas_plot.get_tk_widget()
+                    widget_x = widget.winfo_rootx()
+                    widget_y = widget.winfo_rooty()
+                    # Place at cursor position relative to widget
+                    self.hover_label.place(x=event.x, y=event.y)
+                else:
+                    self.hover_label.place_forget()
+
+        def on_zoom(event):
+            if event.inaxes != ax: return
+
+            base_scale = 1.1
+            if event.button == 'up': # Zoom in
+                scale_factor = 1 / base_scale
+            elif event.button == 'down': # Zoom out
+                scale_factor = base_scale
+            else: return
+
+            xlim = ax.get_xlim()
+            ylim = ax.get_ylim()
+
+            xdata = event.xdata or np.mean(xlim)
+            ydata = event.ydata or np.mean(ylim)
+
+            new_width = (xlim[1] - xlim[0]) * scale_factor
+            new_height = (ylim[1] - ylim[0]) * scale_factor
+
+            relx = (xlim[1] - xdata) / (xlim[1] - xlim[0])
+            rely = (ylim[1] - ydata) / (ylim[1] - ylim[0])
+
+            ax.set_xlim([xdata - new_width * (1 - relx), xdata + new_width * relx])
+            ax.set_ylim([ydata - new_height * (1 - rely), ydata + new_height * rely])
+            self.canvas_plot.draw()
+
+        def reset_zoom():
+            ax.set_xlim(self._initial_xlim)
+            ax.set_ylim(self._initial_ylim)
+            self.canvas_plot.draw()
+
+        # Disconnect all previous event handlers to prevent duplicates
+        for cid in getattr(self, 'event_cids', []):
+            self.canvas_plot.mpl_disconnect(cid)
+        self.event_cids = []
+
+        # Connect new event handlers and store their IDs
+        self.event_cids.append(self.canvas_plot.mpl_connect("scroll_event", on_zoom))
+        self.event_cids.append(self.canvas_plot.mpl_connect("button_press_event", on_press))
+        self.event_cids.append(self.canvas_plot.mpl_connect("button_release_event", on_release))
+        self.event_cids.append(self.canvas_plot.mpl_connect("motion_notify_event", on_motion))
+
+        # Add Reset Zoom button
+        self.reset_zoom_btn = Button(self.plot_frame, text="Reset Zoom", font=("Helvetica Neue", 10),
+                                     bg=self.theme["BTN_COLOR"], fg=self.theme["BTN_TEXT_COLOR"], relief="raised", command=reset_zoom)
+        self.reset_zoom_btn.place(relx=1.0, rely=1.0, x=-5, y=-5, anchor="se")
+
+        self.canvas_plot.draw()
 
     def generate_signal(self, sig_type, t, amp, freq, phase=0):
         phase_rad = np.deg2rad(phase)
         with np.errstate(divide='ignore', invalid='ignore'):
-            if sig_type == "Sine":
-                return amp * np.sin(2 * np.pi * freq * t + phase_rad)
-            elif sig_type == "Square":
-                return amp * np.sign(np.sin(2 * np.pi * freq * t + phase_rad))
-            elif sig_type == "Sawtooth":
-                return amp * (2 * (freq * t - np.floor(0.5 + freq * t)))
-            elif sig_type == "Step":
-                return amp * np.heaviside(t, 1)
+            if sig_type == "Sine": return amp * np.sin(2 * np.pi * freq * t + phase_rad)
+            elif sig_type == "Square": return amp * np.sign(np.sin(2 * np.pi * freq * t + phase_rad))
+            elif sig_type == "Sawtooth": return amp * (2 * (freq * t - np.floor(0.5 + freq * t)))
+            elif sig_type == "Step": return amp * np.heaviside(t, 1)
             elif sig_type == "Impulse":
-                idx = (np.abs(t)).argmin()
                 arr = np.zeros_like(t)
+                idx = np.abs(t).argmin()
                 arr[idx] = amp
                 return arr
-            elif sig_type == "Ramp":
-                return amp * t
+            elif sig_type == "Ramp": return amp * t
         return np.zeros_like(t)
 
     def save_main_plot(self):
@@ -557,17 +593,9 @@ class SignalGUI:
             title="Save Combined Plot As..."
         )
         if file_path:
-            watermark_text = self.figure.text(0.98, 0.02, 'WaveLab',
-                                              fontsize=12, color='#cccccc',
-                                              ha='right', va='bottom', alpha=0.4,
-                                              transform=self.figure.transFigure)
+            watermark_text = self.figure.text(0.98, 0.02, 'WaveLab', fontsize=12, color='#cccccc', ha='right', va='bottom', alpha=0.4, transform=self.figure.transFigure)
             try:
-                self.figure.savefig(
-                    file_path,
-                    dpi=300,
-                    bbox_inches='tight',
-                    facecolor=self.figure.get_facecolor()
-                )
+                self.figure.savefig(file_path, dpi=300, bbox_inches='tight', facecolor=self.figure.get_facecolor())
                 messagebox.showinfo("Save Successful", f"Plot saved to:\n{file_path}")
             except Exception as e:
                 messagebox.showerror("Save Error", f"An error occurred while saving the plot:\n{e}")
@@ -580,16 +608,16 @@ class SignalGUI:
         operation = params["operation"]
         is_discrete = params["is_discrete"]
         num_points = params["samples"] if is_discrete else 500
-        
+
         win = tk.Toplevel(self.master)
         win.title("All Signals")
         win.configure(bg=self.theme["BG_COLOR"])
 
         t_input = np.linspace(0, 1, num_points)
         s1 = self.generate_signal(params["signal_type"], t_input, params["amp1"], params["freq1"], params["phase1"])
-        
+
         fig = None
-        
+
         def setup_ax(ax, title, color):
             ax.set_facecolor(self.theme["PANEL_COLOR"])
             ax.grid(True, linestyle='--', alpha=0.3, color=self.theme["ACCENT_COLOR"])
@@ -612,7 +640,7 @@ class SignalGUI:
             fig, axs = plt.subplots(3, 1, figsize=(8, 8))
             s2 = self.generate_signal(params["signal2_type"], t_input, params["amp2"], params["freq2"], params["phase2"])
             processed = s1 + s2 if operation == "Signal Addition" else s1 * s2
-            
+
             setup_ax(axs[0], "Signal 1", self.theme["SIGNAL1_COLOR"])
             plot_or_stem(axs[0], t_input, s1, self.theme["SIGNAL1_COLOR"])
             setup_ax(axs[1], "Signal 2", self.theme["SIGNAL2_COLOR"])
@@ -626,19 +654,13 @@ class SignalGUI:
             title2 = "Processed Signal"
 
             if operation == "Time Shifting":
-                t0 = params["param"]
-                t_output = t_input + t0
-                processed = s1
+                t_output = t_input + params["param"]
                 title2 = "Shifted Signal"
             elif operation == "Time Scaling":
-                a = params["param"]
-                if a != 0:
-                    t_output = t_input / a
-                processed = s1
+                if params["param"] != 0: t_output = t_input / params["param"]
                 title2 = "Time-Scaled Signal"
             elif operation == "Time Reversal":
                 t_output = -t_input
-                processed = s1
                 title2 = "Reversed Signal"
             elif operation == "Amplitude Scaling":
                 processed = params["param"] * s1
@@ -655,14 +677,11 @@ class SignalGUI:
             canvas = FigureCanvasTkAgg(fig, master=win)
             canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=10)
             canvas.draw()
-            
+
             def save_png():
                 file_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG files", "*.png")], title="Save plot as PNG")
                 if file_path:
-                    watermark_text = fig.text(0.98, 0.02, 'WaveLab',
-                                              fontsize=12, color='#cccccc',
-                                              ha='right', va='bottom', alpha=0.4,
-                                              transform=fig.transFigure)
+                    watermark_text = fig.text(0.98, 0.02, 'WaveLab', fontsize=12, color='#cccccc', ha='right', va='bottom', alpha=0.4, transform=fig.transFigure)
                     try:
                         fig.savefig(file_path, dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor())
                         messagebox.showinfo("Saved", f"Plot saved as:\n{file_path}")
